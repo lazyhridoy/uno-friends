@@ -4,10 +4,14 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../../lib/supabase";
-import { startGame, playCard, drawCard, isPlayable, RoomData, Card, Player, CardColor } from "../../../lib/gameEngine";
+import { startGame, playCard, drawCard, passTurn, isPlayable, RoomData, Card, Player, CardColor } from "../../../lib/gameEngine";
+
+// --- GLOBAL MUTE STATE ---
+let isAudioMuted = false;
 
 // --- INBUILT SYNTHETIC AUDIO ENGINE ---
 const playSound = (type: 'deal' | 'play' | 'turn' | 'error' | 'win') => {
+  if (isAudioMuted) return;
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
@@ -44,14 +48,7 @@ const playSound = (type: 'deal' | 'play' | 'turn' | 'error' | 'win') => {
 
 // --- PREMIUM CARD UI ---
 const AnimatedCard = ({ color, value, isPlayable, onClick, isDrawDeck = false, index = 0 }: any) => {
-  // Pure, non-washed-out colors
-  const bgColors: Record<string, string> = { 
-    red: "bg-[#FF0000]", 
-    blue: "bg-[#0033FF]", 
-    green: "bg-[#00AA00]", 
-    yellow: "bg-[#FFDE00]", // Extremely vibrant pure yellow
-    black: "bg-black" 
-  };
+  const bgColors: Record<string, string> = { red: "bg-[#FF0000]", blue: "bg-[#0033FF]", green: "bg-[#00AA00]", yellow: "bg-[#FFDE00]", black: "bg-black" };
   const currentBg = bgColors[color] || "bg-zinc-500";
   const displayValue = value === 'skip' ? '⊘' : value === 'reverse' ? '⇄' : value === 'draw_2' ? '+2' : value === 'wild' ? 'W' : value === 'wild_draw_4' ? '+4' : value;
 
@@ -78,7 +75,7 @@ const AnimatedCard = ({ color, value, isPlayable, onClick, isDrawDeck = false, i
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.5, y: -200 }}
       transition={{ type: "spring", stiffness: 400, damping: 25, delay: index * 0.05 }}
-      whileHover={isPlayable ? { y: -20, scale: 1.1, zIndex: 100 } : {}}
+      whileHover={isPlayable ? { y: -24, scale: 1.15, zIndex: 100 } : {}}
       whileTap={isPlayable ? { scale: 0.9 } : {}}
       onClick={() => {
         if (isPlayable) { playSound('play'); onClick(); }
@@ -108,7 +105,7 @@ export default function GameRoom() {
   const roomId = (params.id as string).toUpperCase();
 
   const [playerName, setPlayerName] = useState("");
-  const [selectedAvatar, setSelectedAvatar] = useState("🧔🏻‍♂️"); // Default Avatar
+  const [selectedAvatar, setSelectedAvatar] = useState("🧔🏻‍♂️");
   const AVATARS = ['🧔🏻‍♂️', '👱🏼‍♀️', '👨🏾‍🦱', '👩🏻‍🦰', '👦🏻', '👧🏽', '👽', '🤖'];
 
   const [hasJoined, setHasJoined] = useState(false);
@@ -118,10 +115,18 @@ export default function GameRoom() {
   const [timeLeft, setTimeLeft] = useState(30);
   const [restartTimer, setRestartTimer] = useState(10);
   
+  // ⭐️ NEW: Mute & Draw States
+  const [muted, setMuted] = useState(false);
+  const [hasDrawnThisTurn, setHasDrawnThisTurn] = useState(false);
+
+  const toggleMute = () => {
+    isAudioMuted = !isAudioMuted;
+    setMuted(isAudioMuted);
+  };
+  
   const roomDataRef = useRef(roomData);
   useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
 
-  // Database Listener
   useEffect(() => {
     const fetchRoom = async () => {
       const { data } = await supabase.from('rooms').select('*').eq('id', roomId).single();
@@ -134,6 +139,8 @@ export default function GameRoom() {
         const newData = payload.new as RoomData;
         if (newData.current_turn === playerName && roomDataRef.current?.current_turn !== playerName && newData.status === 'playing') {
            playSound('turn');
+           // Reset the draw state when a new turn starts
+           setHasDrawnThisTurn(false);
         }
         setRoomData(newData);
         setPendingWildCardId(null);
@@ -141,12 +148,12 @@ export default function GameRoom() {
     return () => { supabase.removeChannel(roomChannel); };
   }, [roomId, playerName]);
 
-  // The 30 Second AFK Timer
+  // AFK Timer
   useEffect(() => {
     if (roomData?.status !== 'playing') return;
     const players = roomData.players || [];
     const winner = players.find(p => p.hand && p.hand.length === 0);
-    if (winner) return; // Stop turn timer if someone won
+    if (winner) return; 
 
     setTimeLeft(30);
     const interval = setInterval(() => {
@@ -165,7 +172,7 @@ export default function GameRoom() {
     return () => clearInterval(interval);
   }, [roomData?.current_turn, roomData?.status, playerName, roomId]);
 
-  // Win State & 10s Auto-Restart Logic
+  // Win State & 10s Auto-Restart
   useEffect(() => {
     const players = roomData?.players || [];
     const winner = players.find(p => p.hand && p.hand.length === 0);
@@ -177,10 +184,7 @@ export default function GameRoom() {
         setRestartTimer((prev) => {
           if (prev <= 1) {
             clearInterval(interval);
-            // Only the room host (first player) triggers the reset to avoid multiple database calls
-            if (players[0].name === playerName) {
-              handleStartGame();
-            }
+            if (players[0].name === playerName) handleStartGame();
             return 0;
           }
           return prev - 1;
@@ -193,7 +197,6 @@ export default function GameRoom() {
   const joinGame = async () => {
     if (!playerName.trim() || !roomData) return;
     playSound('turn'); 
-    // We cast to any to inject our custom avatar into the game engine's Player object
     const newPlayer = { name: playerName, hand: [], avatar: selectedAvatar } as unknown as Player;
     const updatedPlayers = [...(roomData.players || []), newPlayer];
     const { error } = await supabase.from('rooms').update({ players: updatedPlayers }).eq('id', roomId);
@@ -220,6 +223,28 @@ export default function GameRoom() {
     await playCard(roomId, roomData, playerName, pendingWildCardId, chosenColor);
   };
 
+  const handleDrawAction = async () => {
+    if (!roomData || roomData.current_turn !== playerName || hasDrawnThisTurn) return;
+    try {
+      // Draw card evaluates if the drawn card is playable
+      const isDrawnCardPlayable = await drawCard(roomId, roomData, playerName);
+      if (isDrawnCardPlayable) {
+         setHasDrawnThisTurn(true);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handlePassTurn = async () => {
+    if (!roomData || roomData.current_turn !== playerName) return;
+    try {
+      await passTurn(roomId, roomData, playerName);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const players = roomData?.players || [];
   const isPlaying = roomData?.status === 'playing';
   const myPlayer = players.find(p => p.name === playerName);
@@ -232,19 +257,17 @@ export default function GameRoom() {
   if (isPlaying && hasJoined && myPlayer && roomData) {
     const topCard = roomData.discard_pile[roomData.discard_pile.length - 1];
     const isMyTurn = roomData.current_turn === myPlayer.name;
-    const stackedPile = roomData.discard_pile.slice(-5);
+    const stackedPile = roomData.discard_pile.slice(-8); // Show up to 8 cards underneath
     
     return (
-      // 🌟 DEEP SPOTLIGHT GRADIENT BACKGROUND 🌟
       <main className="h-screen w-full bg-[radial-gradient(circle_at_center,_#1a5ce6_0%,_#041852_100%)] flex flex-col text-white font-sans overflow-hidden relative select-none">
         
-        {/* --- LEADERBOARD & AUTO-RESTART OVERLAY --- */}
+        {/* LEADERBOARD & AUTO-RESTART OVERLAY */}
         <AnimatePresence>
           {winner && (
             <motion.div initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6">
                <h1 className="text-5xl sm:text-7xl font-black text-[#FFDE00] uppercase tracking-tighter mb-2 drop-shadow-[0_5px_15px_rgba(255,222,0,0.5)]">Game Over!</h1>
                <p className="text-white text-xl sm:text-2xl font-bold uppercase tracking-widest mb-8">{winner.name} Wins!</p>
-
                <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl flex flex-col gap-4">
                  {[...players].sort((a,b) => (a.hand?.length || 0) - (b.hand?.length || 0)).map((p, idx) => {
                    const avatar = (p as any).avatar || '👤';
@@ -260,7 +283,6 @@ export default function GameRoom() {
                    );
                  })}
                </div>
-
                <div className="mt-8 text-white/80 font-black text-2xl animate-pulse uppercase tracking-widest bg-white/10 px-6 py-3 rounded-full border border-white/20">
                  Next game in {restartTimer}s...
                </div>
@@ -295,15 +317,12 @@ export default function GameRoom() {
                 return (
                   <motion.div key={p.name} layout className="flex flex-col items-center shrink-0">
                     <motion.div animate={{ scale: isTurn ? 1.1 : 1, y: isTurn ? 5 : 0 }} className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-[1.25rem] flex items-center justify-center font-black text-4xl shadow-lg bg-white/10 backdrop-blur-md border-4 ${isTurn ? 'border-[#00AA00] shadow-[0_0_20px_rgba(0,170,0,0.8)]' : 'border-white/20'}`}>
-                      {/* Using the custom avatar here! */}
                       <span className="drop-shadow-lg">{avatar}</span>
-                      
                       {isTurn && !winner && (
                         <div className={`absolute -top-3 -left-3 ${timeLeft <= 5 ? 'bg-[#FF0000] animate-pulse' : 'bg-[#0033FF]'} text-white text-xs font-black w-8 h-8 flex items-center justify-center rounded-full border-2 border-white shadow-md z-20`}>
                           {timeLeft}s
                         </div>
                       )}
-                      
                       <motion.div key={p.hand?.length} initial={{ scale: 2 }} animate={{ scale: 1 }} className="absolute -bottom-2 -right-2 bg-white text-[#0a4ada] text-xs font-black px-2 py-0.5 rounded-md border-2 border-zinc-200 shadow-md">
                         {p.hand?.length || 0}
                       </motion.div>
@@ -314,27 +333,38 @@ export default function GameRoom() {
               })}
             </AnimatePresence>
           </div>
+
+          {/* ⭐️ NEW: Mute Button */}
+          <button onClick={toggleMute} className="w-10 h-10 bg-white/10 backdrop-blur-md border-2 border-white/20 rounded-xl flex items-center justify-center font-black text-white text-xl shadow-md active:scale-95">
+             {muted ? '🔇' : '🔊'}
+          </button>
         </div>
 
         {/* CENTER ARENA */}
         <div className="flex-1 flex flex-col items-center justify-center relative w-full mt-4 sm:mt-0 z-10">
-          <div className="w-full max-w-3xl flex items-center justify-between px-4 sm:px-12">
-            <div className="flex-1 flex justify-start">
-               <AnimatedCard color="black" value="DUO" isDrawDeck={true} onClick={() => { if (isMyTurn && !winner) drawCard(roomId, roomData, playerName); }} />
+          <div className="w-full max-w-3xl flex items-center justify-between px-4 sm:px-12 relative">
+            
+            <div className="flex-1 flex justify-start z-10">
+               <AnimatedCard color="black" value="DUO" isDrawDeck={true} onClick={() => { if (isMyTurn && !winner && !hasDrawnThisTurn) handleDrawAction(); }} />
             </div>
 
+            {/* ⭐️ UPDATED: Messy Stacking Discard Pile */}
             <div className="relative flex-shrink-0 flex items-center justify-center mx-4">
               <motion.div animate={{ rotate: roomData.direction === 1 ? 360 : -360 }} transition={{ repeat: Infinity, duration: 20, ease: "linear" }} className="absolute w-32 h-32 sm:w-48 sm:h-48 rounded-full border-4 border-white/20 border-l-transparent border-b-transparent opacity-80 pointer-events-none"></motion.div>
               
               <div className="relative w-16 sm:w-24 h-24 sm:h-36 drop-shadow-[0_15px_25px_rgba(0,0,0,0.5)] z-10">
                 <AnimatePresence>
                   {stackedPile.map((card, i) => {
-                    const randomRotation = (card.id.charCodeAt(0) % 25) - 12;
+                    // Create deterministic random offsets for a messy physical pile
+                    const randomRotation = (card.id.charCodeAt(0) % 30) - 15; // -15 to +15 deg
+                    const randomX = (card.id.charCodeAt(1) % 20) - 10;        // -10 to +10 px
+                    const randomY = (card.id.charCodeAt(2) % 20) - 10;        // -10 to +10 px
+
                     return (
                       <motion.div
                         key={card.id}
                         initial={{ scale: 1.5, opacity: 0, y: -100 }}
-                        animate={{ scale: 1, opacity: 1, y: 0, rotate: randomRotation }}
+                        animate={{ scale: 1, opacity: 1, x: randomX, y: randomY, rotate: randomRotation }}
                         className="absolute inset-0 origin-center"
                         style={{ zIndex: i }}
                       >
@@ -346,11 +376,9 @@ export default function GameRoom() {
               </div>
             </div>
 
-            <div className="flex-1 flex justify-end items-center relative">
+            <div className="flex-1 flex justify-end items-center relative z-10">
                <motion.div animate={{ scale: isMyTurn ? 1.15 : 1 }} className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-[1.25rem] flex items-center justify-center font-black text-4xl shadow-lg bg-white/10 backdrop-blur-md border-4 ${isMyTurn ? 'border-[#00AA00] shadow-[0_0_30px_rgba(0,170,0,1)] z-20' : 'border-white/20'}`}>
-                 {/* Local Avatar */}
                  <span className="drop-shadow-lg">{(myPlayer as any).avatar || '👤'}</span>
-                 
                  {isMyTurn && !winner && (
                     <div className={`absolute -top-4 -left-4 ${timeLeft <= 10 ? 'bg-[#FF0000] animate-bounce' : 'bg-[#0033FF]'} text-white text-sm font-black w-10 h-10 flex items-center justify-center rounded-full border-2 border-white shadow-xl z-30`}>
                       {timeLeft}
@@ -361,8 +389,22 @@ export default function GameRoom() {
           </div>
         </div>
 
-        {/* BOTTOM HAND AREA */}
-        <div className="flex flex-col justify-end pb-6 sm:pb-10 pt-4 shrink-0 relative z-30 w-full max-w-5xl mx-auto pointer-events-auto">
+        {/* ⭐️ FIXED: BOTTOM HAND AREA with extra padding so it's not cut off */}
+        <div className="flex flex-col justify-end pb-12 sm:pb-20 pt-4 shrink-0 relative z-30 w-full max-w-5xl mx-auto pointer-events-auto mb-6">
+          
+          {/* ⭐️ NEW: Pass Turn Button */}
+          <div className="flex justify-center mb-6 h-10">
+            {isMyTurn && hasDrawnThisTurn && !winner && (
+              <motion.button 
+                initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                onClick={handlePassTurn} 
+                className="bg-[#FF0000] text-white border-b-4 border-red-900 px-8 py-2 rounded-full font-black text-xl shadow-[0_0_20px_rgba(255,0,0,0.6)] uppercase tracking-widest active:scale-95 transition-transform"
+              >
+                Pass Turn
+              </motion.button>
+            )}
+          </div>
+
           <div className="flex justify-center items-end px-4 overflow-visible -space-x-4 sm:-space-x-8">
             <AnimatePresence>
               {myPlayer.hand.map((card, idx) => (
@@ -378,7 +420,7 @@ export default function GameRoom() {
   }
 
   // ==========================================
-  // WAITING LOBBY (Now with Avatar Picker)
+  // WAITING LOBBY
   // ==========================================
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#e52521] via-[#c61b17] to-[#8b0f0b] flex flex-col items-center justify-center p-6 text-white font-sans overflow-hidden relative">
@@ -394,7 +436,6 @@ export default function GameRoom() {
           <div className="space-y-4">
             <h2 className="text-3xl font-black mb-2 uppercase text-[#e52521]">Join Game</h2>
             
-            {/* AVATAR PICKER */}
             <div className="py-2">
               <p className="text-zinc-400 font-black text-xs uppercase tracking-widest mb-3">Choose Your Avatar</p>
               <div className="flex flex-wrap justify-center gap-2 mb-4">
@@ -411,18 +452,11 @@ export default function GameRoom() {
             </div>
 
             <input 
-              type="text" 
-              placeholder="YOUR NAME" 
-              value={playerName} 
-              onChange={(e) => setPlayerName(e.target.value)} 
-              className="bg-zinc-100 border-4 border-zinc-200 text-[#e52521] px-6 py-4 rounded-2xl w-full focus:outline-none focus:border-[#FFDE00] text-center font-black text-2xl uppercase placeholder-zinc-300" 
-              maxLength={10} 
+              type="text" placeholder="YOUR NAME" value={playerName} onChange={(e) => setPlayerName(e.target.value)} 
+              className="bg-zinc-100 border-4 border-zinc-200 text-[#e52521] px-6 py-4 rounded-2xl w-full focus:outline-none focus:border-[#FFDE00] text-center font-black text-2xl uppercase placeholder-zinc-300" maxLength={10} 
             />
             
-            <button 
-              onClick={joinGame} 
-              className="w-full mt-2 bg-[#FFDE00] text-yellow-900 border-b-8 border-[#d39e00] font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 active:translate-y-1 text-2xl uppercase tracking-widest"
-            >
+            <button onClick={joinGame} className="w-full mt-2 bg-[#FFDE00] text-yellow-900 border-b-8 border-[#d39e00] font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 active:translate-y-1 text-2xl uppercase tracking-widest">
               Play
             </button>
           </div>
@@ -453,10 +487,7 @@ export default function GameRoom() {
             </div>
 
             {players.length >= 2 && (
-              <button 
-                onClick={handleStartGame} 
-                className="mt-4 w-full bg-[#00AA00] text-white border-b-8 border-green-700 font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 active:translate-y-1 text-2xl uppercase tracking-wider"
-              >
+              <button onClick={handleStartGame} className="mt-4 w-full bg-[#00AA00] text-white border-b-8 border-green-700 font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 active:translate-y-1 text-2xl uppercase tracking-wider">
                 Start
               </button>
             )}
