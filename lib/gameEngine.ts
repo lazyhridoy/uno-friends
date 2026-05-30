@@ -16,6 +16,7 @@ export interface Player {
   hand: Card[];
   coins?: number; // Advanced Feature: Betting system
   isBot?: boolean; // Advanced Feature: AI Bot integration
+  avatar?: string; // Fixed: Added for avatar UI
 }
 
 export interface RoomData {
@@ -26,9 +27,10 @@ export interface RoomData {
   direction: 1 | -1;
   discard_pile: Card[];
   deck: Card[];
-  pot?: number; // Advanced Feature: Betting pot
-  turn_started_at?: string; // Advanced Feature: AFK detection (ISO string)
-  entry_bet?: number; // Advanced Feature: Economy entry fee
+  pot?: number; 
+  turn_started_at?: string; 
+  entry_bet?: number; 
+  max_players?: number; // ⭐️ FIXED: This is what crashed Vercel!
 }
 
 /**
