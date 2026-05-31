@@ -1,43 +1,19 @@
 import { supabase } from './supabase';
 
 export type CardColor = 'red' | 'blue' | 'green' | 'yellow' | 'wild';
-export type CardValue = 
-  | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' 
-  | 'skip' | 'reverse' | 'draw_2' | 'wild' | 'wild_draw_4';
+export type CardValue = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'skip' | 'reverse' | 'draw_2' | 'wild' | 'wild_draw_4';
 
-export interface Card {
-  id: string; 
-  color: CardColor;
-  value: CardValue;
-}
-
-export interface Player {
-  name: string;
-  hand: Card[];
-  coins?: number; 
-  isBot?: boolean; 
-  avatar?: string; 
-}
-
+export interface Card { id: string; color: CardColor; value: CardValue; }
+export interface Player { name: string; hand: Card[]; coins?: number; isBot?: boolean; avatar?: string; }
 export interface RoomData {
-  id: string;
-  status: 'waiting' | 'playing';
-  players: Player[];
-  current_turn: string;
-  direction: 1 | -1;
-  discard_pile: Card[];
-  deck: Card[];
-  pot?: number; 
-  turn_started_at?: string; 
-  entry_bet?: number; 
-  max_players?: number; 
+  id: string; status: 'waiting' | 'playing'; players: Player[]; current_turn: string; direction: 1 | -1;
+  discard_pile: Card[]; deck: Card[]; pot?: number; turn_started_at?: string; entry_bet?: number; max_players?: number;
 }
 
 export function generateDeck(): Card[] {
   const colors: CardColor[] = ['red', 'blue', 'green', 'yellow'];
   const deck: Card[] = [];
   let idCounter = 0;
-
   for (const color of colors) {
     deck.push({ id: `card-${idCounter++}`, color, value: '0' });
     for (let i = 1; i <= 9; i++) {
@@ -70,38 +46,17 @@ export function shuffleDeck(deck: Card[]): Card[] {
 export async function startGame(roomId: string, players: Player[]) {
   const deck = shuffleDeck(generateDeck());
   const updatedPlayers = players.map(p => ({ ...p, hand: [] as Card[] }));
-
   for (let i = 0; i < 7; i++) {
-    for (const player of updatedPlayers) {
-      const card = deck.pop();
-      if (card) player.hand.push(card);
-    }
+    for (const player of updatedPlayers) { const card = deck.pop(); if (card) player.hand.push(card); }
   }
-
   let startingCard = deck.pop()!;
-  while (startingCard.value === 'wild_draw_4') {
-    deck.unshift(startingCard);
-    startingCard = deck.pop()!;
-  }
-  const discardPile = [startingCard];
-
+  while (startingCard.value === 'wild_draw_4') { deck.unshift(startingCard); startingCard = deck.pop()!; }
+  
   const startingPlayerIndex = Math.floor(Math.random() * updatedPlayers.length);
-  const currentTurn = updatedPlayers[startingPlayerIndex].name;
-
-  const { error } = await supabase
-    .from('rooms')
-    .update({
-      status: 'playing',
-      players: updatedPlayers,
-      current_turn: currentTurn,
-      direction: 1,
-      discard_pile: discardPile,
-      deck: deck,
-      pot: 0,
-      turn_started_at: new Date().toISOString()
-    })
-    .eq('id', roomId);
-
+  const { error } = await supabase.from('rooms').update({
+      status: 'playing', players: updatedPlayers, current_turn: updatedPlayers[startingPlayerIndex].name,
+      direction: 1, discard_pile: [startingCard], deck: deck, pot: 0, turn_started_at: new Date().toISOString()
+    }).eq('id', roomId);
   if (error) throw error;
 }
 
@@ -120,45 +75,47 @@ function getNextTurn(players: Player[], currentTurn: string, direction: 1 | -1, 
   return players[nextIndex].name;
 }
 
-export async function playCard(roomId: string, roomData: RoomData, playerName: string, cardId: string, chosenColor?: CardColor) {
+// ⭐️ UPDATED: Added calledUno parameter for the 2-card penalty check
+export async function playCard(roomId: string, roomData: RoomData, playerName: string, cardId: string, chosenColor?: CardColor, calledUno: boolean = false) {
   if (roomData.current_turn !== playerName) throw new Error("Not your turn!");
-
   const player = roomData.players.find(p => p.name === playerName);
   if (!player) throw new Error("Player not found");
-
+  
   const cardIndex = player.hand.findIndex(c => c.id === cardId);
-  if (cardIndex === -1) throw new Error("Card not found in hand");
   const card = player.hand[cardIndex];
   const topCard = roomData.discard_pile[roomData.discard_pile.length - 1];
 
   if (!isPlayable(card, topCard)) throw new Error("Invalid move");
 
-  const newHand = [...player.hand];
+  const newHand = [...player.hand]; 
   newHand.splice(cardIndex, 1);
   
-  let updatedPlayers = roomData.players.map(p => 
-    p.name === playerName ? { ...p, hand: newHand } : { ...p, hand: [...p.hand] }
-  );
-
-  let newDirection = roomData.direction;
-  let skipNext = 0;
-  let drawAmount = 0;
-
+  let newDeck = [...roomData.deck];
   const playedCardForDiscard = { ...card };
   if (card.color === 'wild' && chosenColor) playedCardForDiscard.color = chosenColor;
   const newDiscardPile = [...roomData.discard_pile, playedCardForDiscard];
-  let newDeck = [...roomData.deck];
 
-  if (card.value === 'reverse') {
-    newDirection = (newDirection * -1) as 1 | -1;
-    if (updatedPlayers.length === 2) skipNext = 1;
-  } else if (card.value === 'skip') {
-    skipNext = 1;
-  } else if (card.value === 'draw_2') {
-    drawAmount = 2; skipNext = 1;
-  } else if (card.value === 'wild_draw_4') {
-    drawAmount = 4; skipNext = 1;
+  // 🚨 UNO PENALTY LOGIC 🚨
+  // If they have 1 card left and didn't hit the UNO button, PENALTY: Draw 2!
+  if (newHand.length === 1 && !calledUno) {
+      for(let i=0; i<2; i++) {
+        if (newDeck.length === 0) {
+            const top = newDiscardPile.pop()!;
+            newDeck = shuffleDeck(newDiscardPile.map(c => c.color === 'wild' ? { ...c, color: 'wild' } : c));
+            newDiscardPile.length = 0; newDiscardPile.push(top);
+        }
+        if (newDeck.length > 0) newHand.push(newDeck.pop()!);
+      }
   }
+
+  let updatedPlayers = roomData.players.map(p => p.name === playerName ? { ...p, hand: newHand } : { ...p, hand: [...p.hand] });
+
+  let newDirection = roomData.direction; let skipNext = 0; let drawAmount = 0;
+
+  if (card.value === 'reverse') { newDirection = (newDirection * -1) as 1 | -1; if (updatedPlayers.length === 2) skipNext = 1; } 
+  else if (card.value === 'skip') { skipNext = 1; } 
+  else if (card.value === 'draw_2') { drawAmount = 2; skipNext = 1; } 
+  else if (card.value === 'wild_draw_4') { drawAmount = 4; skipNext = 1; }
 
   const nextTurn = getNextTurn(updatedPlayers, playerName, newDirection, skipNext);
 
@@ -168,81 +125,69 @@ export async function playCard(roomId: string, roomData: RoomData, playerName: s
         if (newDeck.length === 0) {
             const top = newDiscardPile.pop()!;
             newDeck = shuffleDeck(newDiscardPile.map(c => c.color === 'wild' ? { ...c, color: 'wild' } : c));
-            newDiscardPile.length = 0;
-            newDiscardPile.push(top);
+            newDiscardPile.length = 0; newDiscardPile.push(top);
         }
         if (newDeck.length > 0) updatedPlayers[nextPlayerIndex].hand.push(newDeck.pop()!);
     }
   }
 
-  const { error } = await supabase
-    .from('rooms')
-    .update({
-      players: updatedPlayers,
-      current_turn: nextTurn,
-      direction: newDirection,
-      discard_pile: newDiscardPile,
-      deck: newDeck,
-      turn_started_at: new Date().toISOString()
+  const { error } = await supabase.from('rooms').update({
+      players: updatedPlayers, current_turn: nextTurn, direction: newDirection, discard_pile: newDiscardPile, deck: newDeck, turn_started_at: new Date().toISOString()
     }).eq('id', roomId);
-
   if (error) throw error;
 }
 
-// ⭐️ UPDATED: New Draw Rule (Play after drawing)
 export async function drawCard(roomId: string, roomData: RoomData, playerName: string) {
   if (roomData.current_turn !== playerName) throw new Error("Not your turn!");
-
   const playerIndex = roomData.players.findIndex(p => p.name === playerName);
-  if (playerIndex === -1) throw new Error("Player not found");
-
-  let newDeck = [...roomData.deck];
-  const newDiscardPile = [...roomData.discard_pile];
+  let newDeck = [...roomData.deck]; const newDiscardPile = [...roomData.discard_pile];
   let updatedPlayers = roomData.players.map(p => ({ ...p, hand: [...p.hand] }));
 
   if (newDeck.length === 0) {
       const top = newDiscardPile.pop()!;
       newDeck = shuffleDeck(newDiscardPile.map(c => c.color === 'wild' ? { ...c, color: 'wild' } : c));
-      newDiscardPile.length = 0;
-      newDiscardPile.push(top);
+      newDiscardPile.length = 0; newDiscardPile.push(top);
   }
 
   const drawnCard = newDeck.pop();
   if (drawnCard) updatedPlayers[playerIndex].hand.push(drawnCard);
-
   const topCard = newDiscardPile[newDiscardPile.length - 1];
   
-  // Default to keeping the turn so the player can play the drawn card
   let nextTurn = playerName; 
+  if (drawnCard && !isPlayable(drawnCard, topCard)) { nextTurn = getNextTurn(updatedPlayers, playerName, roomData.direction); }
 
-  // If the drawn card is NOT playable, automatically pass the turn
-  if (drawnCard && !isPlayable(drawnCard, topCard)) {
-      nextTurn = getNextTurn(updatedPlayers, playerName, roomData.direction);
-  }
-
-  const { error } = await supabase
-    .from('rooms')
-    .update({
-      players: updatedPlayers,
-      current_turn: nextTurn,
-      deck: newDeck,
-      discard_pile: newDiscardPile,
-      turn_started_at: new Date().toISOString()
+  const { error } = await supabase.from('rooms').update({
+      players: updatedPlayers, current_turn: nextTurn, deck: newDeck, discard_pile: newDiscardPile, turn_started_at: new Date().toISOString()
     }).eq('id', roomId);
-
   if (error) throw error;
   return drawnCard && isPlayable(drawnCard, topCard);
 }
 
-// ⭐️ NEW: Manual Pass Turn function
 export async function passTurn(roomId: string, roomData: RoomData, playerName: string) {
   if (roomData.current_turn !== playerName) throw new Error("Not your turn!");
-  
   const nextTurn = getNextTurn(roomData.players, playerName, roomData.direction);
-  const { error } = await supabase
-    .from('rooms')
-    .update({ current_turn: nextTurn, turn_started_at: new Date().toISOString() })
-    .eq('id', roomId);
+  await supabase.from('rooms').update({ current_turn: nextTurn, turn_started_at: new Date().toISOString() }).eq('id', roomId);
+}
 
-  if (error) throw error;
+// AI BOT LOGIC
+export async function executeBotTurn(roomId: string, roomData: RoomData, botName: string) {
+  const botPlayer = roomData.players.find(p => p.name === botName);
+  if (!botPlayer || !botPlayer.isBot || roomData.current_turn !== botName) return;
+
+  const topCard = roomData.discard_pile[roomData.discard_pile.length - 1];
+  const playableCards = botPlayer.hand.filter(c => isPlayable(c, topCard));
+
+  if (playableCards.length > 0) {
+    const cardToPlay = playableCards[0];
+    let chosenColor = undefined;
+    if (cardToPlay.color === 'wild') {
+        const colors: CardColor[] = ['red', 'blue', 'green', 'yellow'];
+        chosenColor = colors[Math.floor(Math.random() * colors.length)];
+    }
+    // Bot always automatically calls UNO to avoid penalty
+    await playCard(roomId, roomData, botName, cardToPlay.id, chosenColor, true);
+  } else {
+    const isPlayableDrawn = await drawCard(roomId, roomData, botName);
+    if (isPlayableDrawn) { await passTurn(roomId, roomData, botName); }
+  }
 }
