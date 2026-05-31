@@ -5,11 +5,11 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "DUO Friends",
-  description: "Made by Hridoy for friends",
+  title: "UNO Friends",
+  description: "Developed by Studio 1337",
   icons: {
-    icon: "/uno.svg", // ⭐️ ফেভিকন হিসেবে আপনার uno.svg কাজ করবে
-    apple: "/uno.svg", // ⭐️ ফোনে ইনস্টল করলে এই আইকনটি দেখাবে
+    icon: "/uno.svg", 
+    apple: "/uno.svg", 
   },
   themeColor: "#E52521",
 };
@@ -21,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className} suppressHydrationWarning>{children}</body>
     </html>
   );
 }

@@ -17,16 +17,14 @@ export default function Home() {
   const [betAmount, setBetAmount] = useState(50);
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [isCreating, setIsCreating] = useState(false);
-  
-  // ⭐️ NEW: Advanced Audio States
-  const [showAudioSettings, setShowAudioSettings] = useState(false);
-  const [bgmMuted, setBgmMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [sfxMuted, setSfxMuted] = useState(false);
+  const [showAudioSettings, setShowAudioSettings] = useState(false);
   
   const AVATARS = ['🧔🏻‍♂️', '👱🏼‍♀️', '👨🏾‍🦱', '👩🏻‍🦰', '👦🏻', '👧🏽', '👽', '🤖'];
 
   useEffect(() => {
-    setBgmMuted(localStorage.getItem('uno_bgm_muted') === 'true');
+    setIsMuted(localStorage.getItem('uno_bgm_muted') === 'true');
     setSfxMuted(localStorage.getItem('uno_sfx_muted') === 'true');
     
     const savedProfile = localStorage.getItem('uno_profile');
@@ -41,7 +39,7 @@ export default function Home() {
     setShowSplash(false);
   };
 
-  const toggleBGM = () => { const newVal = !bgmMuted; setBgmMuted(newVal); localStorage.setItem('uno_bgm_muted', String(newVal)); };
+  const toggleBGM = () => { const newVal = !isMuted; setIsMuted(newVal); localStorage.setItem('uno_bgm_muted', String(newVal)); };
   const toggleSFX = () => { const newVal = !sfxMuted; setSfxMuted(newVal); localStorage.setItem('uno_sfx_muted', String(newVal)); };
   
   const saveProfile = () => {
@@ -80,15 +78,42 @@ export default function Home() {
     </motion.button>
   );
 
+  // ⭐️ STUDIO 1337 SPLASH SCREEN (Line Breaks + Beautiful Animation)
   if (showSplash) {
     return (
-      <main onClick={handleSplashClick} className="min-h-screen bg-gradient-to-b from-[#e52521] via-[#c61b17] to-[#8b0f0b] flex flex-col items-center justify-center cursor-pointer select-none">
-        <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", duration: 1.5 }} className="text-center flex flex-col items-center">
-          <motion.img initial={{ y: -20 }} animate={{ y: [0, -15, 0] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }} src="/logo.png" alt="DUO Logo" className="w-48 h-48 sm:w-64 sm:h-64 mb-8 drop-shadow-[0_15px_25px_rgba(0,0,0,0.5)] object-contain" />
-          <h1 className="text-3xl font-black text-white uppercase tracking-widest drop-shadow-lg">Made by Hridoy</h1>
-          <p className="text-[#FFDE00] font-bold tracking-[0.3em] uppercase mt-2">For Friends</p>
+      <main onClick={handleSplashClick} className="min-h-screen bg-[linear-gradient(135deg,#FF0000_0%,#0033FF_33%,#00AA00_66%,#FFDE00_100%)] flex flex-col items-center justify-center cursor-pointer select-none relative overflow-hidden">
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+        
+        <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", duration: 1.5 }} className="text-center flex flex-col items-center relative z-10 px-4 w-full">
+          <motion.img 
+             initial={{ y: -20 }} animate={{ y: [0, -15, 0] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+             src="/studio 1337.png" alt="Studio 1337 Logo" 
+             className="w-48 h-48 sm:w-64 sm:h-64 mb-4 drop-shadow-[0_10px_25px_rgba(255,255,255,0.1)] object-contain" 
+          />
+          <h1 className="text-2xl font-black text-white uppercase tracking-widest drop-shadow-lg mb-4">Developed By</h1>
+          
+          {/* ⭐️ NEW: Developer Names with Staggered Animation & Line Breaks */}
+          <div className="flex flex-col gap-3 w-full max-w-[280px]">
+            {["DevilGamer1337", "M4784RUL", "X4880", "EM00N 🌙"].map((name, index) => (
+              <motion.div
+                key={name}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.8 + index * 0.2, duration: 0.5, type: "spring" }}
+                className="bg-white/10 backdrop-blur-md border border-white/20 px-6 py-2 rounded-xl shadow-lg w-full text-center"
+              >
+                <span className="text-[#FFDE00] font-bold tracking-[0.2em] uppercase text-sm drop-shadow-md">
+                  {name}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+
         </motion.div>
-        <motion.p animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 2 }} className="absolute bottom-20 text-white/50 uppercase tracking-widest text-sm font-bold">Tap anywhere to continue</motion.p>
+        
+        <motion.p animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 2 }} className="absolute bottom-12 text-white/60 uppercase tracking-widest text-xs font-bold z-10">
+          Tap anywhere to continue
+        </motion.p>
       </main>
     );
   }
@@ -125,9 +150,8 @@ export default function Home() {
               <span className="bg-yellow-200 rounded-full w-5 h-5 flex items-center justify-center text-xs border border-yellow-500">$</span> {profile.coins}
            </div>
            
-           {/* ⭐️ NEW: AUDIO SETTINGS MENU */}
            <button onClick={() => setShowAudioSettings(!showAudioSettings)} className="w-10 h-10 bg-white/20 rounded-full border-2 border-white/30 flex items-center justify-center text-xl shadow-lg backdrop-blur-md">
-              {bgmMuted && sfxMuted ? '🔇' : '🔊'}
+              {isMuted && sfxMuted ? '🔇' : '🔊'}
            </button>
 
            <AnimatePresence>
@@ -136,8 +160,8 @@ export default function Home() {
                   <h4 className="text-red-600 font-black uppercase text-sm mb-3 border-b-2 border-red-100 pb-2">Audio Setup</h4>
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-zinc-600 font-bold text-xs uppercase">Music</span>
-                    <button onClick={toggleBGM} className={`w-12 h-6 rounded-full transition-colors relative ${bgmMuted ? 'bg-zinc-300' : 'bg-green-500'}`}>
-                      <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${bgmMuted ? 'left-0.5' : 'left-6'}`}></div>
+                    <button onClick={toggleBGM} className={`w-12 h-6 rounded-full transition-colors relative ${isMuted ? 'bg-zinc-300' : 'bg-green-500'}`}>
+                      <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${isMuted ? 'left-0.5' : 'left-6'}`}></div>
                     </button>
                   </div>
                   <div className="flex items-center justify-between">

@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../../lib/supabase";
 import { startGame, playCard, drawCard, passTurn, executeBotTurn, isPlayable, RoomData, Card, Player, CardColor } from "../../../lib/gameEngine";
 
-// ⭐️ ADVANCED AUDIO ENGINE (BOOSTED DECIBELS FOR PHONES)
 let isBgmAudioMuted = false;
 let isSfxAudioMuted = false;
 let bgmAudioCtx: AudioContext | null = null;
@@ -19,7 +18,6 @@ const startBGM = async () => {
     if (bgmAudioCtx.state === 'suspended') await bgmAudioCtx.resume();
     if (bgmInterval) clearInterval(bgmInterval);
 
-    // Upbeat and funny classic game melody
     const notes = [293.66, 329.63, 392.00, 440.00, 392.00, 329.63, 293.66, 392.00]; 
     let noteIdx = 0;
 
@@ -31,7 +29,6 @@ const startBGM = async () => {
           osc.type = 'sine';
           osc.frequency.setValueAtTime(notes[noteIdx % notes.length], bgmAudioCtx.currentTime);
           gain.gain.setValueAtTime(0, bgmAudioCtx.currentTime);
-          // 📢 ভলিউম বুস্ট: গেইন লেভেল বাড়িয়ে ০.১২ করা হয়েছে যাতে স্পিকারে স্পষ্ট শোনা যায়
           gain.gain.linearRampToValueAtTime(0.12, bgmAudioCtx.currentTime + 0.05); 
           gain.gain.linearRampToValueAtTime(0, bgmAudioCtx.currentTime + 0.25); 
           osc.start(bgmAudioCtx.currentTime); osc.stop(bgmAudioCtx.currentTime + 0.25);
@@ -50,19 +47,12 @@ const playSound = (type: 'deal' | 'play' | 'turn' | 'error' | 'win' | 'uno' | 'd
     const osc = ctx.createOscillator(); const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination); const now = ctx.currentTime;
     
-    // 📢 ইফেক্টস ভলিউম বুস্ট: প্রতিটি সাউন্ডের গেইন ১.৫ থেকে ২.০ গুণ বুস্ট করা হয়েছে
     if (type === 'deal') { osc.type = 'sine'; osc.frequency.setValueAtTime(900, now); osc.frequency.exponentialRampToValueAtTime(150, now + 0.12); gain.gain.setValueAtTime(1.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12); osc.start(now); osc.stop(now + 0.12); } 
     else if (type === 'play') { osc.type = 'triangle'; osc.frequency.setValueAtTime(180, now); osc.frequency.exponentialRampToValueAtTime(50, now + 0.15); gain.gain.setValueAtTime(1.6, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15); osc.start(now); osc.stop(now + 0.15); } 
     else if (type === 'turn') { osc.type = 'sine'; osc.frequency.setValueAtTime(480, now); osc.frequency.setValueAtTime(720, now + 0.08); gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(1.0, now + 0.04); gain.gain.linearRampToValueAtTime(0, now + 0.25); osc.start(now); osc.stop(now + 0.25); }
-    else if (type === 'draw2') { // 🎵 FUNNY BOING SOUND
-      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(320, now); osc.frequency.linearRampToValueAtTime(600, now + 0.15); osc.frequency.linearRampToValueAtTime(200, now + 0.3); gain.gain.setValueAtTime(1.4, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3); osc.start(now); osc.stop(now + 0.3); 
-    } 
-    else if (type === 'draw4') { // 🎵 FUNNY OH-NO DRAMATIC SLIDE
-      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(450, now); osc.frequency.linearRampToValueAtTime(120, now + 0.4); osc.frequency.linearRampToValueAtTime(80, now + 0.65); gain.gain.setValueAtTime(1.5, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.65); osc.start(now); osc.stop(now + 0.65); 
-    } 
-    else if (type === 'uno') { // 🎵 TRIUMPHANT CELEBRATION CHIME
-      osc.type = 'square'; osc.frequency.setValueAtTime(523.25, now); osc.frequency.setValueAtTime(659.25, now + 0.08); osc.frequency.setValueAtTime(783.99, now + 0.16); osc.frequency.setValueAtTime(1046.50, now + 0.24); gain.gain.setValueAtTime(0.8, now); gain.gain.linearRampToValueAtTime(0, now + 0.45); osc.start(now); osc.stop(now + 0.45); 
-    }
+    else if (type === 'draw2') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(320, now); osc.frequency.linearRampToValueAtTime(600, now + 0.15); osc.frequency.linearRampToValueAtTime(200, now + 0.3); gain.gain.setValueAtTime(1.4, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3); osc.start(now); osc.stop(now + 0.3); } 
+    else if (type === 'draw4') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(450, now); osc.frequency.linearRampToValueAtTime(120, now + 0.4); osc.frequency.linearRampToValueAtTime(80, now + 0.65); gain.gain.setValueAtTime(1.5, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.65); osc.start(now); osc.stop(now + 0.65); } 
+    else if (type === 'uno') { osc.type = 'square'; osc.frequency.setValueAtTime(523.25, now); osc.frequency.setValueAtTime(659.25, now + 0.08); osc.frequency.setValueAtTime(783.99, now + 0.16); osc.frequency.setValueAtTime(1046.50, now + 0.24); gain.gain.setValueAtTime(0.8, now); gain.gain.linearRampToValueAtTime(0, now + 0.45); osc.start(now); osc.stop(now + 0.45); }
   } catch (e) {}
 };
 
@@ -70,11 +60,12 @@ const FastCard = ({ color, value, isPlayable, onClick, isDrawDeck = false }: any
   const bgColors: Record<string, string> = { red: "bg-[#FF0000]", blue: "bg-[#0033FF]", green: "bg-[#00AA00]", yellow: "bg-[#FFDE00]", black: "bg-zinc-900" };
   const displayValue = value === 'skip' ? '⊘' : value === 'reverse' ? '⇄' : value === 'draw_2' ? '+2' : value === 'wild' ? 'W' : value === 'wild_draw_4' ? '+4' : value;
 
+  // ⭐️ UPDATED: Replaced DUO with UNO
   if (isDrawDeck) {
     return (
       <motion.div whileTap={{ scale: 0.9 }} onClick={() => { playSound('deal'); onClick(); }} className="relative w-16 sm:w-24 h-24 sm:h-36 bg-[#0B2545] rounded-xl border-4 border-white shadow-[0_5px_15px_rgba(0,0,0,0.5)] flex items-center justify-center cursor-pointer overflow-hidden">
         <div className="absolute w-[80%] h-[90%] bg-[#FF0000] rounded-[50%] transform -rotate-[25deg] shadow-inner flex items-center justify-center border-4 border-black/20">
-          <span className="text-[#FFDE00] font-black text-xl sm:text-3xl transform rotate-[25deg] drop-shadow-[2px_2px_0_#000]">DUO</span>
+          <span className="text-[#FFDE00] font-black text-xl sm:text-3xl transform rotate-[25deg] drop-shadow-[2px_2px_0_#000]">UNO</span>
         </div>
       </motion.div>
     );
@@ -130,6 +121,9 @@ export default function GameRoom() {
   const roomDataRef = useRef(roomData);
   useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
 
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+
   useEffect(() => {
     const saved = localStorage.getItem('uno_profile');
     if (saved) setProfile(JSON.parse(saved)); else router.push('/');
@@ -158,7 +152,6 @@ export default function GameRoom() {
     return () => { supabase.removeChannel(roomChannel); stopBGM(); document.removeEventListener('click', initAudio); document.removeEventListener('touchstart', initAudio); };
   }, [roomId, router, profile?.name]);
 
-  // ⭐️ 30s COUNTDOWN + AUTOMATIC BOT TAKEOVER LOOP
   useEffect(() => {
     if (roomData?.status !== 'playing' || !profile) return;
     const players = roomData.players || [];
@@ -169,10 +162,8 @@ export default function GameRoom() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          // 🚨 AFK BOT TAKEOVER CRITICAL TRIGGER 🚨
           if (roomDataRef.current?.current_turn === profile.name) {
              playSound('error');
-             // Auto force AI execution logic directly to pass or drop card
              const topCard = roomDataRef.current.discard_pile[roomDataRef.current.discard_pile.length - 1];
              const myLocalPlayer = roomDataRef.current.players.find(p => p.name === profile.name);
              const playable = myLocalPlayer ? myLocalPlayer.hand.filter(c => isPlayable(c, topCard)) : [];
@@ -199,18 +190,20 @@ export default function GameRoom() {
     return () => clearInterval(interval);
   }, [roomData?.current_turn, roomData?.status, roomId, profile]);
 
-  // ⭐️ 10s AUTO-RESTART NEXT ROUND CALCULATION
+  const winner = roomData?.players?.find(p => p.hand && p.hand.length === 0);
+  const winnerName = winner?.name;
+  const isPlayingStatus = roomData?.status === 'playing';
+
   useEffect(() => {
-    const players = roomData?.players || [];
-    const winner = players.find(p => p.hand && p.hand.length === 0);
-    
-    if (winner && roomData?.status === 'playing') {
+    if (winnerName && isPlayingStatus) {
       setRestartTimer(10);
       const interval = setInterval(() => {
         setRestartTimer((prev) => {
           if (prev <= 1) {
             clearInterval(interval);
-            if (players[0].name === profile?.name) handleStartGame();
+            if (roomDataRef.current && roomDataRef.current.players[0]?.name === profileRef.current?.name) {
+              startGame(roomId, roomDataRef.current.players);
+            }
             return 0;
           }
           return prev - 1;
@@ -218,7 +211,7 @@ export default function GameRoom() {
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [roomData?.players, roomData?.status, profile]);
+  }, [winnerName, isPlayingStatus, roomId]);
 
   const joinGame = async () => {
     if (!profile || !roomData) return;
@@ -265,7 +258,6 @@ export default function GameRoom() {
   const isPlaying = roomData?.status === 'playing';
   const myPlayer = players.find(p => p.name === profile.name);
   const otherPlayers = players.filter(p => p.name !== profile.name);
-  const winner = players.find(p => p.hand && p.hand.length === 0);
 
   if (isPlaying && hasJoined && myPlayer && roomData) {
     const topCard = roomData.discard_pile[roomData.discard_pile.length - 1];
@@ -276,7 +268,6 @@ export default function GameRoom() {
       <main className="h-screen w-full bg-[#1853db] flex flex-col text-white font-sans overflow-hidden relative select-none">
         <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#ffffff 2px, transparent 2px)', backgroundSize: '30px 30px' }}></div>
 
-        {/* ⭐️ LEADERBOARD OVERLAY SCREEN (1st, 2nd, 3rd with 10s Timer) */}
         <AnimatePresence>
           {winner && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 z-[200] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6">
@@ -339,7 +330,6 @@ export default function GameRoom() {
           </div>
         </div>
 
-        {/* CIRCULAR ARCH LAYOUT */}
         <div className="w-full h-48 sm:h-64 mt-12 sm:mt-8 z-10 relative flex justify-center items-end max-w-3xl mx-auto px-2 pointer-events-none">
             {otherPlayers.map((p, index) => {
               const isTurn = roomData.current_turn === p.name;
@@ -361,7 +351,6 @@ export default function GameRoom() {
             })}
         </div>
 
-        {/* DEAD CENTER PLAYING ARENA */}
         <div className="flex-1 w-full relative z-10">
           <div className="absolute inset-0 m-auto w-48 h-48 sm:w-64 sm:h-64 rounded-full border-[6px] border-white/10 border-l-transparent border-b-transparent pointer-events-none animate-spin flex items-center justify-center" style={{ animationDuration: '4s' }}></div>
           <div className="absolute inset-0 m-auto w-full max-w-lg h-36 flex items-center justify-center">
@@ -393,7 +382,6 @@ export default function GameRoom() {
           </div>
         </div>
 
-        {/* ⭐️ FIXED RESPONSIVE HAND AREA: (Uses scroll track so cards never break grid on hoarding) */}
         <div className="flex flex-col justify-end pb-24 sm:pb-32 shrink-0 relative z-30 w-full max-w-full mx-auto pointer-events-auto mb-4">
           
           <div className="flex justify-center mb-4 h-12 relative">
@@ -407,13 +395,30 @@ export default function GameRoom() {
             )}
           </div>
 
-          {/* ⭐️ SCROLL CONSTRAINED TRAYS RE-ENGINEERED */}
-          <div className="flex overflow-x-auto no-scrollbar max-w-full items-end justify-start sm:justify-center px-8 pb-4 -space-x-5 sm:-space-x-8">
-              {myPlayer.hand.map((card, idx) => (
-                <div key={card.id} style={{ zIndex: idx }} className="shrink-0">
-                  <FastCard color={card.color === 'wild' ? 'black' : card.color} value={card.value} index={idx} isPlayable={isMyTurn && !winner && isPlayable(card, topCard)} onClick={() => handlePlayCard(card)} />
-                </div>
-              ))}
+          <div className="flex overflow-visible max-w-full items-end justify-center px-4 pb-4">
+            <AnimatePresence mode="popLayout">
+              {myPlayer.hand.map((card, idx) => {
+                 const cardCount = myPlayer.hand.length;
+                 const dynamicScale = cardCount > 7 ? Math.max(0.5, 7 / cardCount) : 1;
+                 const marginLeftStyle = idx === 0 ? "0px" : (cardCount > 7 ? `${-45 * dynamicScale}px` : "-24px");
+                 
+                 return (
+                    <motion.div 
+                      key={card.id} 
+                      layout
+                      style={{ 
+                        zIndex: idx, 
+                        transform: `scale(${dynamicScale})`,
+                        transformOrigin: "bottom center",
+                        marginLeft: marginLeftStyle
+                      }}
+                      className="shrink-0 transition-all duration-200"
+                    >
+                      <FastCard color={card.color === 'wild' ? 'black' : card.color} value={card.value} index={idx} isPlayable={isMyTurn && !winner && isPlayable(card, topCard)} onClick={() => handlePlayCard(card)} />
+                    </motion.div>
+                 );
+              })}
+            </AnimatePresence>
           </div>
         </div>
       </main>
