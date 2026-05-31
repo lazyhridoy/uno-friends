@@ -6,55 +6,70 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../../lib/supabase";
 import { startGame, playCard, drawCard, passTurn, executeBotTurn, isPlayable, RoomData, Card, Player, CardColor } from "../../../lib/gameEngine";
 
-let isAudioMuted = false;
+// ⭐️ ADVANCED AUDIO ENGINE STATES
+let isBgmAudioMuted = false;
+let isSfxAudioMuted = false;
+let bgmAudioCtx: AudioContext | null = null;
 let bgmInterval: any = null;
 
-// AUDIO ENGINE (SFX + Slow Continuous BGM)
-const playSound = (type: 'deal' | 'play' | 'turn' | 'error' | 'win' | 'uno') => {
-  if (isAudioMuted) return;
+// ⭐️ FUN PLAYFUL BGM (Classic Mobile Game Style)
+const startBGM = async () => {
+  if (isBgmAudioMuted) return;
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator(); const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination); const now = ctx.currentTime;
-    
-    if (type === 'deal') { osc.type = 'sine'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(100, now + 0.1); gain.gain.setValueAtTime(0.5, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1); } 
-    else if (type === 'play') { osc.type = 'triangle'; osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(40, now + 0.15); gain.gain.setValueAtTime(0.8, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15); osc.start(now); osc.stop(now + 0.15); } 
-    else if (type === 'turn') { osc.type = 'sine'; osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(660, now + 0.1); gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.3, now + 0.05); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3); }
-    else if (type === 'uno') { osc.type = 'square'; osc.frequency.setValueAtTime(880, now); osc.frequency.setValueAtTime(1200, now + 0.1); gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.5, now + 0.05); gain.gain.linearRampToValueAtTime(0, now + 0.4); osc.start(now); osc.stop(now + 0.4); }
-  } catch (e) {}
-};
+    if (!bgmAudioCtx) bgmAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (bgmAudioCtx.state === 'suspended') await bgmAudioCtx.resume();
+    if (bgmInterval) clearInterval(bgmInterval);
 
-// ⭐️ NEW: Continuous Slow Ambient Background Music
-const startBGM = () => {
-  if (bgmInterval || isAudioMuted) return;
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const notes = [261.63, 329.63, 392.00, 329.63]; // C E G E
+    // Playful, bouncy pentatonic melody (C, E, G, A)
+    const notes = [261.63, 329.63, 392.00, 440.00, 392.00, 329.63]; 
     let noteIdx = 0;
+
     bgmInterval = setInterval(() => {
-       if (isAudioMuted) return;
+       if (isBgmAudioMuted || !bgmAudioCtx) return;
        try {
-          const osc = ctx.createOscillator(); const gain = ctx.createGain();
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.type = 'sine'; osc.frequency.setValueAtTime(notes[noteIdx % notes.length] / 2, ctx.currentTime);
-          gain.gain.setValueAtTime(0, ctx.currentTime); gain.gain.linearRampToValueAtTime(0.03, ctx.currentTime + 0.5); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 2.0);
-          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 2.0);
+          const osc = bgmAudioCtx.createOscillator(); const gain = bgmAudioCtx.createGain();
+          osc.connect(gain); gain.connect(bgmAudioCtx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(notes[noteIdx % notes.length], bgmAudioCtx.currentTime);
+          gain.gain.setValueAtTime(0, bgmAudioCtx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.04, bgmAudioCtx.currentTime + 0.05); // Plucky attack
+          gain.gain.linearRampToValueAtTime(0, bgmAudioCtx.currentTime + 0.2); // Quick decay
+          osc.start(bgmAudioCtx.currentTime); osc.stop(bgmAudioCtx.currentTime + 0.2);
           noteIdx++;
        } catch(e){}
-    }, 2000);
+    }, 300); // Upbeat tempo
   } catch(e){}
 };
 
 const stopBGM = () => { if (bgmInterval) { clearInterval(bgmInterval); bgmInterval = null; } };
 
+// ⭐️ SPECIFIC SFX (Draw 2, Draw 4, UNO)
+const playSound = (type: 'deal' | 'play' | 'turn' | 'error' | 'win' | 'uno' | 'draw2' | 'draw4') => {
+  if (isSfxAudioMuted) return;
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination); const now = ctx.currentTime;
+    
+    if (type === 'deal') { osc.type = 'sine'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(100, now + 0.1); gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1); } 
+    else if (type === 'play') { osc.type = 'triangle'; osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(40, now + 0.15); gain.gain.setValueAtTime(0.5, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15); osc.start(now); osc.stop(now + 0.15); } 
+    else if (type === 'turn') { osc.type = 'sine'; osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(660, now + 0.1); gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.3, now + 0.05); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3); }
+    // 🎵 FUNNY +2 SOUND (Bouncy)
+    else if (type === 'draw2') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(100, now + 0.3); gain.gain.setValueAtTime(0.4, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3); osc.start(now); osc.stop(now + 0.3); }
+    // 🎵 DRAMATIC +4 SOUND (Sliding down Oh-No!)
+    else if (type === 'draw4') { osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(50, now + 0.6); gain.gain.setValueAtTime(0.5, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6); osc.start(now); osc.stop(now + 0.6); }
+    // 🎵 TRIUMPHANT UNO (Arpeggio)
+    else if (type === 'uno') { osc.type = 'square'; osc.frequency.setValueAtTime(523.25, now); osc.frequency.setValueAtTime(659.25, now + 0.1); osc.frequency.setValueAtTime(783.99, now + 0.2); osc.frequency.setValueAtTime(1046.50, now + 0.3); gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.5); osc.start(now); osc.stop(now + 0.5); }
+  } catch (e) {}
+};
+
 const FastCard = ({ color, value, isPlayable, onClick, isDrawDeck = false }: any) => {
-  const bgColors: Record<string, string> = { red: "bg-[#FF0000]", blue: "bg-[#0033FF]", green: "bg-[#00AA00]", yellow: "bg-[#FFDE00]", black: "bg-black" };
+  const bgColors: Record<string, string> = { red: "bg-[#FF0000]", blue: "bg-[#0033FF]", green: "bg-[#00AA00]", yellow: "bg-[#FFDE00]", black: "bg-zinc-900" };
   const displayValue = value === 'skip' ? '⊘' : value === 'reverse' ? '⇄' : value === 'draw_2' ? '+2' : value === 'wild' ? 'W' : value === 'wild_draw_4' ? '+4' : value;
 
-  // ⭐️ UPDATED: Classic DUO deck visuals
   if (isDrawDeck) {
     return (
-      <motion.div whileTap={{ scale: 0.9 }} onClick={() => { playSound('deal'); onClick(); }} className="relative w-16 sm:w-24 h-24 sm:h-36 bg-[#0B2545] rounded-xl border-4 border-white shadow-xl flex items-center justify-center cursor-pointer overflow-hidden">
+      <motion.div whileTap={{ scale: 0.9 }} onClick={() => { playSound('deal'); onClick(); }} className="relative w-16 sm:w-24 h-24 sm:h-36 bg-[#0B2545] rounded-xl border-4 border-white shadow-[0_5px_15px_rgba(0,0,0,0.5)] flex items-center justify-center cursor-pointer overflow-hidden">
         <div className="absolute w-[80%] h-[90%] bg-[#FF0000] rounded-[50%] transform -rotate-[25deg] shadow-inner flex items-center justify-center border-4 border-black/20">
           <span className="text-[#FFDE00] font-black text-xl sm:text-3xl transform rotate-[25deg] drop-shadow-[2px_2px_0_#000]">DUO</span>
         </div>
@@ -62,18 +77,34 @@ const FastCard = ({ color, value, isPlayable, onClick, isDrawDeck = false }: any
     );
   }
 
+  const WildCenter = () => (
+    <div className="w-[85%] h-[85%] rounded-[50%] shadow-inner flex items-center justify-center overflow-hidden border-2 border-zinc-200" style={{ background: 'conic-gradient(#FF0000 0 90deg, #0033FF 90deg 180deg, #00AA00 180deg 270deg, #FFDE00 270deg 360deg)' }}>
+       {value === 'wild_draw_4' && (
+         <div className="relative w-full h-full flex items-center justify-center transform -rotate-[15deg]">
+            <div className="absolute w-4 h-6 sm:w-6 sm:h-9 bg-[#00AA00] rounded-sm shadow-md -ml-6 sm:-ml-8 mt-4 border border-black/20"></div>
+            <div className="absolute w-4 h-6 sm:w-6 sm:h-9 bg-[#0033FF] rounded-sm shadow-md -ml-2 sm:-ml-3 -mt-4 border border-black/20"></div>
+            <div className="absolute w-4 h-6 sm:w-6 sm:h-9 bg-[#FF0000] rounded-sm shadow-md ml-2 sm:ml-3 mt-2 border border-black/20"></div>
+            <div className="absolute w-4 h-6 sm:w-6 sm:h-9 bg-[#FFDE00] rounded-sm shadow-md ml-6 sm:ml-8 -mt-2 border border-black/20"></div>
+         </div>
+       )}
+    </div>
+  );
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.5 }}
       whileHover={isPlayable ? { y: -20, scale: 1.1, zIndex: 100 } : {}} whileTap={isPlayable ? { scale: 0.9 } : {}}
-      onClick={() => { if (isPlayable) { playSound('play'); onClick(); } else { playSound('error'); } }}
-      className={`relative w-16 sm:w-24 h-24 sm:h-36 rounded-xl border-2 sm:border-4 border-white shadow-lg flex items-center justify-center select-none ${bgColors[color] || "bg-zinc-500"} ${isPlayable ? 'cursor-pointer' : 'opacity-80 saturate-50'}`}
+      onClick={() => { 
+        if (isPlayable) { onClick(); } // Sound is now handled inside handlePlayCard
+        else { playSound('error'); } 
+      }}
+      className={`relative w-16 sm:w-24 h-24 sm:h-36 rounded-xl border-2 sm:border-4 border-white shadow-[0_5px_10px_rgba(0,0,0,0.4)] flex items-center justify-center select-none ${bgColors[color] || "bg-zinc-500"} ${isPlayable ? 'cursor-pointer' : 'opacity-80 saturate-50'}`}
     >
-      <div className="w-[75%] h-[85%] bg-white rounded-t-full rounded-b-full transform -rotate-12 flex items-center justify-center shadow-inner">
-        {color === 'black' ? ( <span className="text-black font-black text-2xl sm:text-4xl">W</span> ) : ( <span className={`text-4xl sm:text-6xl font-black transform rotate-12 drop-shadow-sm ${color === 'yellow' ? 'text-[#FFDE00]' : color === 'red' ? 'text-[#FF0000]' : color === 'blue' ? 'text-[#0033FF]' : color === 'green' ? 'text-[#00AA00]' : 'text-black'}`}>{displayValue}</span> )}
+      <div className="w-[75%] h-[85%] bg-white rounded-t-full rounded-b-full transform -rotate-12 flex items-center justify-center shadow-inner overflow-hidden border sm:border-2 border-zinc-200">
+        {color === 'black' ? <WildCenter /> : <span className={`text-4xl sm:text-6xl font-black transform rotate-12 drop-shadow-sm ${color === 'yellow' ? 'text-[#FFDE00]' : color === 'red' ? 'text-[#FF0000]' : color === 'blue' ? 'text-[#0033FF]' : color === 'green' ? 'text-[#00AA00]' : 'text-black'}`}>{displayValue}</span>}
       </div>
-      <span className="absolute top-1 left-1.5 text-white font-black text-xs sm:text-sm leading-none drop-shadow-md">{displayValue}</span>
-      <span className="absolute bottom-1 right-1.5 text-white font-black text-xs sm:text-sm leading-none rotate-180 drop-shadow-md">{displayValue}</span>
+      <span className={`absolute top-1 left-1.5 font-black text-xs sm:text-sm leading-none drop-shadow-md text-white`} style={color==='black'?{WebkitTextStroke:'1px black'}:{}}>{displayValue}</span>
+      <span className={`absolute bottom-1 right-1.5 font-black text-xs sm:text-sm leading-none rotate-180 drop-shadow-md text-white`} style={color==='black'?{WebkitTextStroke:'1px black'}:{}}>{displayValue}</span>
     </motion.div>
   );
 };
@@ -89,10 +120,12 @@ export default function GameRoom() {
   const [timeLeft, setTimeLeft] = useState(30);
   const [restartTimer, setRestartTimer] = useState(10);
   
-  const [muted, setMuted] = useState(false);
-  const [hasDrawnThisTurn, setHasDrawnThisTurn] = useState(false);
+  // ⭐️ ADVANCED AUDIO UI STATES
+  const [showAudioSettings, setShowAudioSettings] = useState(false);
+  const [bgmMuted, setBgmMuted] = useState(false);
+  const [sfxMuted, setSfxMuted] = useState(false);
   
-  // ⭐️ NEW: UNO call state
+  const [hasDrawnThisTurn, setHasDrawnThisTurn] = useState(false);
   const [calledUno, setCalledUno] = useState(false);
   
   const roomDataRef = useRef(roomData);
@@ -102,10 +135,12 @@ export default function GameRoom() {
     const saved = localStorage.getItem('uno_profile');
     if (saved) setProfile(JSON.parse(saved)); else router.push('/');
     
-    const isM = localStorage.getItem('uno_muted') === 'true';
-    isAudioMuted = isM; setMuted(isM);
-    if (!isM) startBGM();
-
+    // Setup Audio
+    const savedBgm = localStorage.getItem('uno_bgm_muted') === 'true';
+    const savedSfx = localStorage.getItem('uno_sfx_muted') === 'true';
+    isBgmAudioMuted = savedBgm; setBgmMuted(savedBgm);
+    isSfxAudioMuted = savedSfx; setSfxMuted(savedSfx);
+    
     const fetchRoom = async () => { const { data } = await supabase.from('rooms').select('*').eq('id', roomId).single(); if (data) setRoomData(data as RoomData); };
     fetchRoom();
 
@@ -113,12 +148,16 @@ export default function GameRoom() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, (payload) => {
         const newData = payload.new as RoomData;
         if (profile && newData.current_turn === profile.name && roomDataRef.current?.current_turn !== profile.name) {
-           playSound('turn'); setHasDrawnThisTurn(false); setCalledUno(false); // Reset states on new turn
+           playSound('turn'); setHasDrawnThisTurn(false); setCalledUno(false);
         }
         setRoomData(newData); setPendingWildCardId(null);
       }).subscribe();
       
-    return () => { supabase.removeChannel(roomChannel); stopBGM(); };
+    const initAudio = () => { if(!isBgmAudioMuted) startBGM(); };
+    document.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('touchstart', initAudio, { once: true });
+
+    return () => { supabase.removeChannel(roomChannel); stopBGM(); document.removeEventListener('click', initAudio); document.removeEventListener('touchstart', initAudio); };
   }, [roomId, router, profile?.name]);
 
   useEffect(() => {
@@ -155,11 +194,8 @@ export default function GameRoom() {
     if (!error) setHasJoined(true);
   };
 
-  const toggleMute = () => { 
-    const newM = !muted; setMuted(newM); isAudioMuted = newM; 
-    localStorage.setItem('uno_muted', String(newM)); 
-    if (newM) stopBGM(); else startBGM();
-  };
+  const toggleBGM = () => { const newM = !bgmMuted; setBgmMuted(newM); isBgmAudioMuted = newM; localStorage.setItem('uno_bgm_muted', String(newM)); if(newM) stopBGM(); else startBGM(); };
+  const toggleSFX = () => { const newM = !sfxMuted; setSfxMuted(newM); isSfxAudioMuted = newM; localStorage.setItem('uno_sfx_muted', String(newM)); };
 
   const handleStartGame = async () => { if (roomData && roomData.players.length >= 2) await startGame(roomId, roomData.players); };
   
@@ -168,13 +204,21 @@ export default function GameRoom() {
     const topCard = roomData.discard_pile[roomData.discard_pile.length - 1];
     if (!isPlayable(card, topCard)) return;
     if (card.color === 'wild') { setPendingWildCardId(card.id); return; }
-    // Pass the calledUno state to the engine
+    
+    // ⭐️ Trigger specific sound based on card played
+    if (card.value === 'draw_2') playSound('draw2');
+    else if (card.value === 'wild_draw_4') playSound('draw4');
+    else playSound('play');
+
     await playCard(roomId, roomData, profile.name, card.id, undefined, calledUno);
   };
 
   const handlePlayWildCard = async (chosenColor: CardColor) => {
     if (!roomData || !profile || !pendingWildCardId) return;
-    playSound('play');
+    // The only wild card pending might be +4 or normal wild. Find it from hand to check type.
+    const myHandCard = myPlayer?.hand.find(c => c.id === pendingWildCardId);
+    if (myHandCard?.value === 'wild_draw_4') playSound('draw4'); else playSound('play');
+
     await playCard(roomId, roomData, profile.name, pendingWildCardId, chosenColor, calledUno);
   };
 
@@ -197,9 +241,9 @@ export default function GameRoom() {
     const stackedPile = roomData.discard_pile.slice(-4); 
     
     return (
-      <main className="h-screen w-full bg-[radial-gradient(circle_at_center,_#1a5ce6_0%,_#041852_100%)] flex flex-col text-white font-sans overflow-hidden relative select-none">
-        
-        {/* WILD COLOR PICKER */}
+      <main className="h-screen w-full bg-[#1853db] flex flex-col text-white font-sans overflow-hidden relative select-none">
+        <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#ffffff 2px, transparent 2px)', backgroundSize: '30px 30px' }}></div>
+
         {pendingWildCardId && (
           <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
              <div className="bg-[#0a4ada] border-4 border-white p-6 rounded-3xl text-center shadow-2xl">
@@ -213,75 +257,95 @@ export default function GameRoom() {
           </div>
         )}
 
-        <div className="w-full flex items-center justify-between p-4 z-20">
+        <div className="w-full flex items-center justify-between p-4 z-20 absolute top-0 left-0">
           <button onClick={() => router.push('/')} className="w-10 h-10 bg-[#FFDE00] rounded-xl flex items-center justify-center font-black text-yellow-900 shadow-md border-b-4 border-[#d39e00]">{'<'}</button>
           
-          <div className="flex-1 flex justify-center gap-4 mx-4 overflow-x-auto no-scrollbar py-2">
+          {/* ⭐️ AUDIO SETTINGS DROP DOWN */}
+          <div className="relative">
+             <button onClick={() => setShowAudioSettings(!showAudioSettings)} className="w-10 h-10 bg-white/10 backdrop-blur-md border-2 border-white/20 rounded-xl flex items-center justify-center text-xl shadow-lg">
+                {bgmMuted && sfxMuted ? '🔇' : '🔊'}
+             </button>
+             <AnimatePresence>
+               {showAudioSettings && (
+                 <motion.div initial={{ opacity: 0, scale: 0.8, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }} className="absolute top-12 right-0 bg-white rounded-2xl shadow-2xl p-4 w-48 border-4 border-[#0B2545] z-50">
+                    <h4 className="text-[#0B2545] font-black uppercase text-sm mb-3 border-b-2 border-blue-100 pb-2">Audio Setup</h4>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-zinc-600 font-bold text-xs uppercase">Music</span>
+                      <button onClick={toggleBGM} className={`w-12 h-6 rounded-full transition-colors relative ${bgmMuted ? 'bg-zinc-300' : 'bg-green-500'}`}>
+                        <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${bgmMuted ? 'left-0.5' : 'left-6'}`}></div>
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-zinc-600 font-bold text-xs uppercase">SFX</span>
+                      <button onClick={toggleSFX} className={`w-12 h-6 rounded-full transition-colors relative ${sfxMuted ? 'bg-zinc-300' : 'bg-green-500'}`}>
+                        <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${sfxMuted ? 'left-0.5' : 'left-6'}`}></div>
+                      </button>
+                    </div>
+                 </motion.div>
+               )}
+             </AnimatePresence>
+          </div>
+        </div>
+
+        <div className="w-full h-48 sm:h-64 mt-12 sm:mt-8 z-10 relative flex justify-center items-end max-w-3xl mx-auto px-2 pointer-events-none">
             {otherPlayers.map((p, index) => {
               const isTurn = roomData.current_turn === p.name;
+              const total = otherPlayers.length; let angle = 0;
+              if (total > 1) { const startAngle = -65; const endAngle = 65; angle = startAngle + (endAngle - startAngle) * (index / (total - 1)); }
+              const rad = angle * (Math.PI / 180);
+              const x = Math.sin(rad) * 160; const y = (1 - Math.cos(rad)) * 80; 
+
               return (
-                <div key={p.name} className="flex flex-col items-center shrink-0">
-                  <div className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center font-black text-3xl shadow-lg bg-white/10 backdrop-blur-md border-4 ${isTurn ? 'border-[#00AA00] scale-110 shadow-[0_0_15px_rgba(0,170,0,0.8)]' : 'border-white/20'}`}>
+                <div key={p.name} className="absolute flex flex-col items-center transition-transform duration-500 ease-in-out pb-4" style={{ transform: `translate(${x}px, ${y}px)` }}>
+                  <div className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center font-black text-3xl shadow-lg bg-white/10 backdrop-blur-md border-4 ${isTurn ? 'border-[#00AA00] scale-110 shadow-[0_0_15px_rgba(0,170,0,0.8)]' : 'border-white/20'}`}>
                     <span>{p.avatar || '🤖'}</span>
                     {isTurn && <div className="absolute -top-3 -left-3 bg-[#FF0000] animate-pulse text-white text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white z-20">{timeLeft}</div>}
                     <div className="absolute -bottom-2 -right-2 bg-white text-[#0a4ada] text-xs font-black px-2 py-0.5 rounded-md border-2 border-zinc-200">{p.hand?.length || 0}</div>
                   </div>
-                  <div className="mt-2 text-[10px] sm:text-xs font-black text-white capitalize truncate max-w-[60px]">{p.name}</div>
+                  <div className="mt-2 text-[10px] sm:text-xs font-black text-white capitalize truncate max-w-[60px] drop-shadow-md">{p.name}</div>
                 </div>
               );
             })}
-          </div>
-          <button onClick={toggleMute} className="w-10 h-10 bg-white/10 backdrop-blur-md border-2 border-white/20 rounded-xl flex items-center justify-center text-xl">{muted ? '🔇' : '🔊'}</button>
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center relative w-full z-10">
-          <div className="w-full max-w-2xl flex items-center justify-between px-6 relative">
-            <div className="flex-1 flex justify-start z-10">
+        <div className="flex-1 w-full relative z-10">
+          <div className="absolute inset-0 m-auto w-48 h-48 sm:w-64 sm:h-64 rounded-full border-[6px] border-white/10 border-l-transparent border-b-transparent pointer-events-none animate-spin flex items-center justify-center" style={{ animationDuration: '4s' }}></div>
+          <div className="absolute inset-0 m-auto w-full max-w-lg h-36 flex items-center justify-center">
+            
+            <div className="absolute left-4 sm:left-12 z-20">
                <FastCard color="black" value="DUO" isDrawDeck={true} onClick={() => { if (isMyTurn && !winner && !hasDrawnThisTurn) handleDrawAction(); }} />
             </div>
 
-            <div className="relative flex-shrink-0 flex items-center justify-center mx-4">
-              <div className={`absolute w-32 h-32 sm:w-48 sm:h-48 rounded-full border-4 border-white/10 border-l-transparent border-b-transparent pointer-events-none animate-spin ${roomData.direction === -1 && 'animation-reverse'}`} style={{ animationDuration: '4s' }}></div>
-              <div className="relative w-16 sm:w-24 h-24 sm:h-36 z-10">
-                <AnimatePresence>
-                  {stackedPile.map((card, i) => {
-                    const rRot = (card.id.charCodeAt(0) % 30) - 15; const rX = (card.id.charCodeAt(1) % 16) - 8; const rY = (card.id.charCodeAt(2) % 16) - 8;
-                    return (
-                      <motion.div key={card.id} initial={{ opacity: 0, scale: 1.2 }} animate={{ opacity: 1, scale: 1, x: rX, y: rY, rotate: rRot }} className="absolute inset-0 origin-center" style={{ zIndex: i }}>
-                        <FastCard color={card.color === 'wild' ? 'black' : card.color} value={card.value} />
-                      </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
-              </div>
+            <div className="relative w-16 sm:w-24 h-24 sm:h-36 z-10">
+              <AnimatePresence>
+                {stackedPile.map((card, i) => {
+                  const rRot = (card.id.charCodeAt(0) % 30) - 15; const rX = (card.id.charCodeAt(1) % 16) - 8; const rY = (card.id.charCodeAt(2) % 16) - 8;
+                  return (
+                    <motion.div key={card.id} initial={{ opacity: 0, scale: 1.2 }} animate={{ opacity: 1, scale: 1, x: rX, y: rY, rotate: rRot }} className="absolute inset-0 origin-center" style={{ zIndex: i }}>
+                      <FastCard color={card.color === 'wild' ? 'black' : card.color} value={card.value} />
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </div>
 
-            <div className="flex-1 flex justify-end items-center relative z-10">
+            <div className="absolute right-4 sm:right-12 z-20">
                <div className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-[1.25rem] flex items-center justify-center font-black text-4xl shadow-lg bg-white/10 backdrop-blur-md border-4 transition-transform ${isMyTurn ? 'border-[#00AA00] scale-110 shadow-[0_0_20px_rgba(0,170,0,0.8)] z-20' : 'border-white/20'}`}>
                  <span>{profile.avatar}</span>
                  {isMyTurn && !winner && <div className="absolute -top-3 -left-3 bg-[#FF0000] animate-bounce text-white text-xs font-black w-8 h-8 flex items-center justify-center rounded-full border-2 border-white z-30">{timeLeft}</div>}
                </div>
             </div>
+
           </div>
         </div>
 
-        {/* BOTTOM HAND AREA */}
-        <div className="flex flex-col justify-end pb-24 sm:pb-32 pt-4 shrink-0 relative z-30 w-full max-w-5xl mx-auto pointer-events-auto mb-10">
-          
-          {/* ⭐️ NEW: UNO Call Button & Pass Turn Actions */}
+        <div className="flex flex-col justify-end pb-16 sm:pb-24 pt-4 shrink-0 relative z-30 w-full max-w-5xl mx-auto pointer-events-auto mb-10">
           <div className="flex justify-center mb-4 h-12 relative">
-            
-            {/* Show UNO Button if it's my turn, I have exactly 2 cards, and haven't called it yet */}
             {isMyTurn && myPlayer.hand.length === 2 && !calledUno && !winner && (
-               <motion.button 
-                 initial={{ scale: 0 }} animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1 }}
-                 onClick={() => { setCalledUno(true); playSound('uno'); }}
-                 className="absolute -top-16 bg-[#FF0000] text-white border-4 border-[#FFDE00] px-8 py-3 rounded-full font-black text-2xl shadow-[0_0_30px_rgba(255,0,0,0.8)] uppercase tracking-widest z-50"
-               >
+               <motion.button initial={{ scale: 0 }} animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1 }} onClick={() => { setCalledUno(true); playSound('uno'); }} className="absolute -top-16 bg-[#FF0000] text-white border-4 border-[#FFDE00] px-8 py-3 rounded-full font-black text-2xl shadow-[0_0_30px_rgba(255,0,0,0.8)] uppercase tracking-widest z-50">
                  UNO!
                </motion.button>
             )}
-
             {isMyTurn && hasDrawnThisTurn && !winner && (
               <button onClick={() => passTurn(roomId, roomData, profile.name)} className="bg-[#FF0000] text-white border-b-4 border-red-900 px-8 py-2 rounded-full font-black text-xl shadow-lg uppercase tracking-widest active:scale-95">Pass Turn</button>
             )}

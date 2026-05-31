@@ -1,34 +1,17 @@
-import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "UNO Friends",
-  description: "Real-time multiplayer UNO card game",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "UNO Friends"
-  }
-};
-
-export const viewport: Viewport = {
-  themeColor: "#09090b",
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  title: "DUO Friends",
+  description: "Made by Hridoy for friends",
+  icons: {
+    icon: "/uno.svg", // ⭐️ ফেভিকন হিসেবে আপনার uno.svg কাজ করবে
+    apple: "/uno.svg", // ⭐️ ফোনে ইনস্টল করলে এই আইকনটি দেখাবে
+  },
+  themeColor: "#E52521",
 };
 
 export default function RootLayout({
@@ -37,12 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      suppressHydrationWarning
-    >
-      <body className="min-h-full flex flex-col" suppressHydrationWarning>{children}</body>
+    <html lang="en">
+      <body className={inter.className}>{children}</body>
     </html>
   );
 }

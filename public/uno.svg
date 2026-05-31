@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Red Rounded Background -->
+  <rect width="512" height="512" rx="120" fill="#E52521" />
+  
+  <g transform="rotate(-25 256 256)">
+    <!-- Inner White Oval -->
+    <ellipse cx="256" cy="256" rx="220" ry="160" fill="#FFFFFF" stroke="#000000" stroke-width="10" stroke-opacity="0.2" />
+    
+    <!-- "DUO" Text with Drop Shadow and Stroke -->
+    <text x="256" y="305" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="160" fill="#FFCC00" text-anchor="middle" stroke="#000000" stroke-width="12">DUO</text>
+    
+    <!-- Tiny Colored Cards Graphic -->
+    <g transform="translate(180, 100) scale(0.6)">
+       <rect x="0" y="0" width="60" height="90" rx="10" fill="#00AA00" stroke="#000" stroke-width="4" transform="rotate(-15)"/>
+       <rect x="40" y="-10" width="60" height="90" rx="10" fill="#0033FF" stroke="#000" stroke-width="4" transform="rotate(5)"/>
+    </g>
+  </g>
+</svg>

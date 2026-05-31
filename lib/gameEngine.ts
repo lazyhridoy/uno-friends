@@ -75,7 +75,6 @@ function getNextTurn(players: Player[], currentTurn: string, direction: 1 | -1, 
   return players[nextIndex].name;
 }
 
-// ⭐️ UPDATED: Added calledUno parameter for the 2-card penalty check
 export async function playCard(roomId: string, roomData: RoomData, playerName: string, cardId: string, chosenColor?: CardColor, calledUno: boolean = false) {
   if (roomData.current_turn !== playerName) throw new Error("Not your turn!");
   const player = roomData.players.find(p => p.name === playerName);
@@ -95,8 +94,7 @@ export async function playCard(roomId: string, roomData: RoomData, playerName: s
   if (card.color === 'wild' && chosenColor) playedCardForDiscard.color = chosenColor;
   const newDiscardPile = [...roomData.discard_pile, playedCardForDiscard];
 
-  // 🚨 UNO PENALTY LOGIC 🚨
-  // If they have 1 card left and didn't hit the UNO button, PENALTY: Draw 2!
+  // UNO PENALTY LOGIC
   if (newHand.length === 1 && !calledUno) {
       for(let i=0; i<2; i++) {
         if (newDeck.length === 0) {
@@ -115,11 +113,13 @@ export async function playCard(roomId: string, roomData: RoomData, playerName: s
   if (card.value === 'reverse') { newDirection = (newDirection * -1) as 1 | -1; if (updatedPlayers.length === 2) skipNext = 1; } 
   else if (card.value === 'skip') { skipNext = 1; } 
   else if (card.value === 'draw_2') { drawAmount = 2; skipNext = 1; } 
+  // ⭐️ 4+ RULE: Next player draws 4 AND their turn is skipped
   else if (card.value === 'wild_draw_4') { drawAmount = 4; skipNext = 1; }
 
   const nextTurn = getNextTurn(updatedPlayers, playerName, newDirection, skipNext);
 
   if (drawAmount > 0) {
+    // The player who takes the cards is the immediate next person (0 skips from current)
     const nextPlayerIndex = updatedPlayers.findIndex(p => p.name === getNextTurn(updatedPlayers, playerName, newDirection, 0));
     for(let i=0; i<drawAmount; i++) {
         if (newDeck.length === 0) {
@@ -169,7 +169,6 @@ export async function passTurn(roomId: string, roomData: RoomData, playerName: s
   await supabase.from('rooms').update({ current_turn: nextTurn, turn_started_at: new Date().toISOString() }).eq('id', roomId);
 }
 
-// AI BOT LOGIC
 export async function executeBotTurn(roomId: string, roomData: RoomData, botName: string) {
   const botPlayer = roomData.players.find(p => p.name === botName);
   if (!botPlayer || !botPlayer.isBot || roomData.current_turn !== botName) return;
@@ -184,7 +183,6 @@ export async function executeBotTurn(roomId: string, roomData: RoomData, botName
         const colors: CardColor[] = ['red', 'blue', 'green', 'yellow'];
         chosenColor = colors[Math.floor(Math.random() * colors.length)];
     }
-    // Bot always automatically calls UNO to avoid penalty
     await playCard(roomId, roomData, botName, cardToPlay.id, chosenColor, true);
   } else {
     const isPlayableDrawn = await drawCard(roomId, roomData, botName);

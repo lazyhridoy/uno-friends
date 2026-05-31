@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
   const router = useRouter();
+  
+  const [showSplash, setShowSplash] = useState(true);
   const [profile, setProfile] = useState<{name: string, avatar: string, coins: number} | null>(null);
   const [tempName, setTempName] = useState("");
   const [tempAvatar, setTempAvatar] = useState("🧔🏻‍♂️");
@@ -15,22 +17,32 @@ export default function Home() {
   const [betAmount, setBetAmount] = useState(50);
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [isCreating, setIsCreating] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  
+  // ⭐️ NEW: Advanced Audio States
+  const [showAudioSettings, setShowAudioSettings] = useState(false);
+  const [bgmMuted, setBgmMuted] = useState(false);
+  const [sfxMuted, setSfxMuted] = useState(false);
+  
   const AVATARS = ['🧔🏻‍♂️', '👱🏼‍♀️', '👨🏾‍🦱', '👩🏻‍🦰', '👦🏻', '👧🏽', '👽', '🤖'];
 
   useEffect(() => {
-    const mutedSaved = localStorage.getItem('uno_muted') === 'true';
-    setIsMuted(mutedSaved);
+    setBgmMuted(localStorage.getItem('uno_bgm_muted') === 'true');
+    setSfxMuted(localStorage.getItem('uno_sfx_muted') === 'true');
+    
     const savedProfile = localStorage.getItem('uno_profile');
     if (savedProfile) {
       const parsed = JSON.parse(savedProfile);
-      setProfile(parsed);
-      setTempName(parsed.name);
-      setTempAvatar(parsed.avatar);
+      setProfile(parsed); setTempName(parsed.name); setTempAvatar(parsed.avatar);
     }
   }, []);
 
-  const toggleMute = () => { const newMute = !isMuted; setIsMuted(newMute); localStorage.setItem('uno_muted', String(newMute)); };
+  const handleSplashClick = () => {
+    try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); ctx.resume(); } catch(e){}
+    setShowSplash(false);
+  };
+
+  const toggleBGM = () => { const newVal = !bgmMuted; setBgmMuted(newVal); localStorage.setItem('uno_bgm_muted', String(newVal)); };
+  const toggleSFX = () => { const newVal = !sfxMuted; setSfxMuted(newVal); localStorage.setItem('uno_sfx_muted', String(newVal)); };
   
   const saveProfile = () => {
     if (!tempName.trim()) return;
@@ -46,9 +58,7 @@ export default function Home() {
     const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const initialPlayers = [{ name: profile.name, hand: [], avatar: profile.avatar, isBot: false }];
     if (withBots) {
-      for(let i=1; i < maxPlayers; i++) {
-        initialPlayers.push({ name: `Bot ${i}`, hand: [], avatar: '🤖', isBot: true });
-      }
+      for(let i=1; i < maxPlayers; i++) initialPlayers.push({ name: `Bot ${i}`, hand: [], avatar: '🤖', isBot: true });
     }
     const { error } = await supabase.from('rooms').insert([{ 
       id: newRoomId, status: 'waiting', players: initialPlayers, entry_bet: betAmount, pot: 0, max_players: maxPlayers
@@ -70,6 +80,19 @@ export default function Home() {
     </motion.button>
   );
 
+  if (showSplash) {
+    return (
+      <main onClick={handleSplashClick} className="min-h-screen bg-gradient-to-b from-[#e52521] via-[#c61b17] to-[#8b0f0b] flex flex-col items-center justify-center cursor-pointer select-none">
+        <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", duration: 1.5 }} className="text-center flex flex-col items-center">
+          <motion.img initial={{ y: -20 }} animate={{ y: [0, -15, 0] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }} src="/logo.png" alt="DUO Logo" className="w-48 h-48 sm:w-64 sm:h-64 mb-8 drop-shadow-[0_15px_25px_rgba(0,0,0,0.5)] object-contain" />
+          <h1 className="text-3xl font-black text-white uppercase tracking-widest drop-shadow-lg">Made by Hridoy</h1>
+          <p className="text-[#FFDE00] font-bold tracking-[0.3em] uppercase mt-2">For Friends</p>
+        </motion.div>
+        <motion.p animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 2 }} className="absolute bottom-20 text-white/50 uppercase tracking-widest text-sm font-bold">Tap anywhere to continue</motion.p>
+      </main>
+    );
+  }
+
   if (!profile) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-red-600 to-red-900 flex flex-col items-center justify-center p-6 text-white">
@@ -89,24 +112,43 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-red-500 via-red-600 to-red-800 flex flex-col items-center p-6 text-white font-sans overflow-hidden select-none relative">
-      
-      {/* ⭐️ FIXED: Header Layout prevents overlap */}
       <div className="w-full max-w-md flex justify-between items-start mb-8 z-20 mt-4 px-2">
         <div className="flex flex-col gap-2 items-start">
-           {currentScreen !== 'home' && (
-             <button onClick={() => setCurrentScreen('home')} className="w-12 h-12 bg-yellow-400 rounded-xl border-b-4 border-yellow-600 flex items-center justify-center font-black text-yellow-900 text-2xl mb-2 shadow-lg">{'<'}</button>
-           )}
-           {/* Clickable Profile to Edit */}
+           {currentScreen !== 'home' && ( <button onClick={() => setCurrentScreen('home')} className="w-12 h-12 bg-yellow-400 rounded-xl border-b-4 border-yellow-600 flex items-center justify-center font-black text-yellow-900 text-2xl mb-2 shadow-lg">{'<'}</button> )}
            <button onClick={() => setProfile(null)} className="bg-yellow-400 text-yellow-900 font-black px-3 py-2 rounded-full border-b-4 border-yellow-600 shadow-lg flex items-center gap-2 uppercase tracking-widest text-xs active:scale-95 transition-transform">
-             <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center text-sm shadow-inner">{profile.avatar}</div>
-             {profile.name} ✏️
+             <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center text-sm shadow-inner">{profile.avatar}</div> {profile.name} ✏️
            </button>
         </div>
-        <div className="flex flex-col items-end gap-2">
-           <button onClick={toggleMute} className="w-10 h-10 bg-white/20 rounded-full border-2 border-white/30 flex items-center justify-center text-xl shadow-lg backdrop-blur-md">{isMuted ? '🔇' : '🔊'}</button>
+        
+        <div className="flex flex-col items-end gap-3 relative">
            <div className="bg-yellow-400 text-yellow-900 font-black px-4 py-2 rounded-full border-b-4 border-yellow-600 shadow-lg flex items-center gap-1 text-lg">
               <span className="bg-yellow-200 rounded-full w-5 h-5 flex items-center justify-center text-xs border border-yellow-500">$</span> {profile.coins}
            </div>
+           
+           {/* ⭐️ NEW: AUDIO SETTINGS MENU */}
+           <button onClick={() => setShowAudioSettings(!showAudioSettings)} className="w-10 h-10 bg-white/20 rounded-full border-2 border-white/30 flex items-center justify-center text-xl shadow-lg backdrop-blur-md">
+              {bgmMuted && sfxMuted ? '🔇' : '🔊'}
+           </button>
+
+           <AnimatePresence>
+             {showAudioSettings && (
+               <motion.div initial={{ opacity: 0, scale: 0.8, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }} className="absolute top-24 right-0 bg-white rounded-2xl shadow-2xl p-4 w-48 border-4 border-red-900/20 z-50">
+                  <h4 className="text-red-600 font-black uppercase text-sm mb-3 border-b-2 border-red-100 pb-2">Audio Setup</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-zinc-600 font-bold text-xs uppercase">Music</span>
+                    <button onClick={toggleBGM} className={`w-12 h-6 rounded-full transition-colors relative ${bgmMuted ? 'bg-zinc-300' : 'bg-green-500'}`}>
+                      <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${bgmMuted ? 'left-0.5' : 'left-6'}`}></div>
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-600 font-bold text-xs uppercase">SFX</span>
+                    <button onClick={toggleSFX} className={`w-12 h-6 rounded-full transition-colors relative ${sfxMuted ? 'bg-zinc-300' : 'bg-green-500'}`}>
+                      <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${sfxMuted ? 'left-0.5' : 'left-6'}`}></div>
+                    </button>
+                  </div>
+               </motion.div>
+             )}
+           </AnimatePresence>
         </div>
       </div>
 
@@ -123,9 +165,7 @@ export default function Home() {
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter drop-shadow-md mb-8">Bot Match</h1>
           <p className="font-black uppercase tracking-widest mb-4">Total Players (You + Bots)</p>
           <div className="grid grid-cols-4 gap-3 w-full mb-8">
-            {[2,3,4,5].map(num => (
-              <button key={num} onClick={() => setMaxPlayers(num)} className={`p-3 rounded-2xl border-4 ${maxPlayers === num ? 'bg-purple-500 border-yellow-400 scale-110' : 'bg-purple-800 border-purple-600'}`}><div className="text-yellow-400 font-black text-2xl">{num}</div></button>
-            ))}
+            {[2,3,4,5].map(num => ( <button key={num} onClick={() => setMaxPlayers(num)} className={`p-3 rounded-2xl border-4 ${maxPlayers === num ? 'bg-purple-500 border-yellow-400 scale-110' : 'bg-purple-800 border-purple-600'}`}><div className="text-yellow-400 font-black text-2xl">{num}</div></button> ))}
           </div>
           <button onClick={() => createRoom(true)} disabled={isCreating} className="w-full bg-yellow-400 text-yellow-900 border-b-8 border-yellow-600 font-black py-5 rounded-3xl text-2xl uppercase">Start Match</button>
         </div>
@@ -144,9 +184,7 @@ export default function Home() {
         <div className="w-full flex-1 flex flex-col items-center pt-4 z-10 max-w-md">
           <p className="font-black uppercase tracking-widest mb-4">Select Players</p>
           <div className="grid grid-cols-4 gap-3 w-full mb-8">
-            {[2,3,4,5,6,7,8,10].map(num => (
-              <button key={num} onClick={() => setMaxPlayers(num)} className={`p-3 rounded-2xl border-4 ${maxPlayers === num ? 'bg-purple-500 border-yellow-400 scale-110' : 'bg-purple-800 border-purple-600'}`}><div className="text-yellow-400 font-black text-2xl">{num}</div></button>
-            ))}
+            {[2,3,4,5,6,7,8,10].map(num => ( <button key={num} onClick={() => setMaxPlayers(num)} className={`p-3 rounded-2xl border-4 ${maxPlayers === num ? 'bg-purple-500 border-yellow-400 scale-110' : 'bg-purple-800 border-purple-600'}`}><div className="text-yellow-400 font-black text-2xl">{num}</div></button> ))}
           </div>
           <button onClick={() => createRoom(false)} disabled={isCreating} className="w-full bg-yellow-400 text-yellow-900 border-b-8 border-yellow-600 font-black py-5 rounded-3xl text-2xl uppercase">Create Room</button>
         </div>
